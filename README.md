@@ -1,4 +1,4 @@
-# Hate Raids on Twtich
+# Hate Raids on Twitch
 This is the R code behind my paper, "Couldn’t Protect You: The Cost of (Hate) Raids on Smaller Streamers," which was completed in collaboration with Dr. Rachel Kowert.
 
 ## Order of Operation
