@@ -1,0 +1,213 @@
+---
+title: "Hate Raids - Data Collection"
+format: html
+---
+
+
+## Load libraries
+```{r}
+if (!require("academictwitteR")) install.packages("academictwitteR")
+if (!require("tidyverse")) install.packages("tidyverse")
+if (!require("data.table")) install.packages("data.table")
+if (!require("lubridate")) install.packages("lubridate")
+```
+
+
+## Identify release date of tags
+
+Pull tweets that include the terms Twitch and tags.
+```
+tag_release = get_all_tweets(
+  query = "twitch tags",
+  start_tweets = "2021-05-21T00:00:00Z",
+  end_tweets = "2021-06-01T00:00:00Z",
+  data_path = "tag_release/",
+  lang = "en",
+  is_retweet = FALSE,
+  remove_promoted = TRUE,
+  bind_tweets = FALSE,
+  n = Inf
+  )
+```
+
+Bind the pulled tweets
+```{r}
+tag_release = bind_tweets(data_path = "data/tag_release", output_format = "tidy")
+```
+
+Write the tweets to a csv file.
+```{r}
+fwrite (tag_release, "data/tag_release.csv")
+```
+
+
+Explore the collected tweets for release
+
+```{r}
+released = tag_release %>%
+  filter(str_detect(text, 'released')) %>%
+  select(text, created_at, tweet_id)
+View(released)
+```
+
+```{r}
+live = tag_release %>%
+  mutate(date = date(created_at)) %>% 
+  filter(str_detect(text, 'live')) %>%
+  select(text, created_at, tweet_id)
+View(live)
+```
+
+```{r}
+new = tag_release %>%
+  mutate(date = date(created_at)) %>% 
+  filter(str_detect(text, 'new')) %>%
+  filter(str_detect(created_at, '2021-05-26T16:')) %>%
+  select(text, created_at, tweet_id)
+View(new)
+```
+
+```{r}
+tag_release %>%
+  filter(user_username == 'TwitchSupport')
+```
+
+
+## Pull tweets pre-release
+```
+pre_release = get_all_tweets(
+  query = c("twitch raid", "twitch raids"),
+  start_tweets = "2021-04-28T16:00:00Z",
+  end_tweets = "2021-05-26T16:00:00Z",
+  data_path = "pre_release/",
+  lang = "en",
+  is_retweet = FALSE,
+  remove_promoted = TRUE,
+  bind_tweets = FALSE,
+  n = Inf
+  )
+```
+
+```{r}
+pre_release = bind_tweets(data_path = "data/pre_release", output_format = "tidy")
+```
+
+```{r}
+pre_release = pre_release %>%
+  distinct(tweet_id, .keep_all = TRUE)
+```
+
+
+```{r}
+fwrite (pre_release, "data/pre_release.csv")
+```
+
+
+## Pull tweets post-release
+```
+post_release = get_all_tweets(
+  query = c("twitch raid", "twitch raids"),
+  start_tweets = "2021-05-26T16:00:00Z",
+  end_tweets = "2021-06-23T16:00:00Z",
+  data_path = "post_release/",
+  lang = "en",
+  is_retweet = FALSE,
+  remove_promoted = TRUE,
+  bind_tweets = FALSE,
+  n = Inf
+  )
+```
+
+```{r}
+post_release = bind_tweets(data_path = "data/post_release", output_format = "tidy")
+```
+
+```{r}
+post_release = post_release %>%
+  distinct(tweet_id, .keep_all = TRUE)
+```
+
+
+```{r}
+fwrite (post_release, "data/post_release.csv")
+```
+
+
+```{r}
+pre_release2 = pre_release %>%
+  mutate (set = "Pre-Release")
+post_release2 = post_release %>%
+  mutate (set = "Post-Release")
+```
+
+```{r}
+tweets = rbind(pre_release2, post_release2)
+```
+
+
+## Public Metrics
+
+```{r}
+pre_release_pm = bind_tweets(data_path = "data/pre_release") %>% 
+  as_tibble
+```
+
+```{r}
+pre_release_pm = pre_release_pm %>%
+  unnest(public_metrics) %>%
+  select(id, retweet_count, reply_count, like_count, quote_count) %>%
+  distinct(id, .keep_all = TRUE)
+```
+
+
+```{r}
+post_release_pm = bind_tweets(data_path = "data/post_release") %>% 
+  as_tibble
+```
+
+```{r}
+post_release_pm = post_release_pm %>%
+  unnest(public_metrics) %>%
+  select(id, retweet_count, reply_count, like_count, quote_count) %>%
+  distinct(id, .keep_all = TRUE)
+```
+
+```{r}
+pre_release_pm
+post_release_pm
+```
+
+
+
+```{r}
+tweets_pm = rbind(pre_release_pm, post_release_pm) %>%
+  rename(tweet_id = id) %>%
+  distinct(tweet_id, .keep_all = TRUE)
+```
+
+```{r}
+tweets %>%
+  select(-c(retweet_count, like_count, quote_count))
+```
+
+
+
+```{r}
+tweets_all = merge((tweets %>%
+                      select(-c(retweet_count, like_count, quote_count))),
+                   tweets_pm, by.x = "tweet_id", by.y = "tweet_id", all = FALSE) %>%
+  distinct(tweet_id, .keep_all = TRUE)
+```
+
+
+
+# filter for game terms
+
+
+```{r}
+filtered_tweets = tweets_all %>%
+  filter(!str_detect(text, "(?i)warcraft|(?i)destiny|(?i)shadow|(?i)legends|(?i)ffxiv|(?i)pokemon|(?i)vault")) %>%
+  filter(conversation_id == tweet_id) %>%
+  distinct(tweet_id, .keep_all = TRUE)
+```
+

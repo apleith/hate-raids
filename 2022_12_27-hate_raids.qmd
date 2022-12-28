@@ -1,0 +1,182 @@
+---
+title: "Hate Raids - Hate Raid Tweets"
+format: html
+editor: visual
+---
+
+## Load libraries
+
+```{r}
+if (!require("data.table")) install.packages("data.table")
+if (!require("tidyverse")) install.packages("tidyverse")
+if (!require("lubridate")) install.packages("lubridate")
+if (!require("rstatix")) install.packages("rstatix")
+if (!require("academictwitteR")) install.packages("academictwitteR")
+if (!require("ggrepel")) install.packages("ggrepel")
+
+
+##if (!require("syuzhet")) install.packages("syuzhet")
+#if (!require("ggpubr")) install.packages("ggpubr")
+#if (!require("ggthemes")) install.packages("ggthemes")
+#if (!require("scales")) install.packages("scales")
+#if (!require("ggrepel")) install.packages("ggrepel")
+
+```
+
+## Pre-Release and Post-Release Hate Raid Tweets
+
+
+```{r}
+hr_tweets = filtered_tweets %>%
+  group_by(set) %>%
+  filter(str_detect(text, "(?i)hate raids|(?i)hate raid")) %>%
+  ungroup()
+
+hr_tweets
+```
+
+## Wrangle Hate Raid Tweet Data
+
+
+```{r}
+hr_tweets_count = hr_tweets %>%
+  group_by(set, created_at) %>%
+  mutate(date =  ymd_hms(created_at),
+         date = round_date(date, "day")) %>%
+  count(date) %>%
+  ungroup()
+
+hr_tweets_count
+```
+
+```{r}
+hr_tweet_count = hr_tweets_count %>%
+  complete(date = seq.Date(as.Date("2021/04/28"), as.Date("2021/06/23"), by="day")) %>%
+  mutate(set) %>%
+  select(-created_at)
+
+hr_tweet_count_pre = hr_tweet_count %>%
+  filter (date > as.Date("2021-04-28") & date < as.Date("2021-05-26")) %>%
+  mutate (set = "Pre-Release",
+          n = ifelse(is.na(n), 0, n)) %>%
+  add_row(date = as.Date("2021-04-28"), set = "Pre-Release", n = 0)
+
+
+hr_tweet_count_post = hr_tweet_count %>%
+  filter (date > as.Date("2021-05-26") & date < as.Date("2021-06-23")) %>%
+  mutate (set = "Post-Release",
+          n = ifelse(is.na(n), 0, n)) %>%
+  add_row(date = as.Date("2021-04-28"), set = "Post-Release", n = 0)
+
+hr_tweet_count = rbind(hr_tweet_count_pre, hr_tweet_count_post)
+
+hr_tweet_count
+```
+
+## T-test for Pre and Post-Release Hate Raid Tweets
+
+```{r}
+hr_tweet_count %>%
+  t_test(n ~ set, detailed = TRUE) %>%
+  add_significance()
+
+hr_tweet_count %>%
+  cohens_d(n ~ set)
+
+```
+
+## Collect Hate Raid Tweets for Six Months Follow Tag Release
+```{r}
+hate_raids_6mos = get_all_tweets(
+      query = "Twitch hate raids",
+      start_tweets = "2021-05-26T00:00:00Z",
+      end_tweets = "2021-11-26T00:00:00Z",
+      data_path = "hate_raids_6mos/",
+      lang = "en",
+      is_retweet = FALSE,
+      remove_promoted = TRUE,
+      bind_tweets = FALSE,
+      n = Inf
+      )
+```
+
+    
+
+```{r}
+hate_raids_6mos = bind_tweets(data_path = "data/hate_raids_6mos", output_format = "tidy")
+```
+
+```{r}
+hate_raids_6mos = hate_raids_6mos %>%
+  distinct(id, .keep_all = TRUE)
+```
+
+```{r}
+fwrite (hate_raids_6mos, "data/hate_raids_6mos.csv")
+```
+
+```{r}
+hate_raids_6mos = fread("data/hate_raids_6mos.csv")
+```
+
+
+## Wrangle Six Month Hate Raid Tweet Data
+
+```{r}
+hr_6mos_time = hate_raids_6mos %>%
+  mutate(date =  ymd_hms(created_at),
+         date = round_date(date, "hour"))
+hr_6mos_time
+```
+
+```{r}
+hr_6mos_count = hr_6mos_time %>%
+  group_by(date) %>%
+  count(date) %>%
+  arrange(desc(n)) %>%
+  mutate(date = as.Date(date),
+         flag = n > 97.84)
+
+hr_6mos_count
+```
+
+```{r}
+(mean(hr_6mos_count$n)) + (sd(hr_6mos_count$n))
+
+```
+
+## Visualization Hate Raid Frequency
+
+```{r}
+# Most basic bubble plot
+fig5 = hr_6mos_count %>%
+  ggplot(aes(x=date, 
+             y=n,
+             color = "#F98400")) +
+  geom_line(size=1) + 
+  labs(x = "Dates Between May 26 and November 25, 2021",
+       y = "Number of Tweets") +
+  geom_label_repel(data = hr_6mos_count %>% 
+                     filter(flag) %>% 
+                     unique(),
+                   aes(label = n,
+                       fill = "#FF2500"),
+                   color = "white") +
+  scale_x_date(date_breaks = "2 weeks", 
+               date_labels = "%b %d") + 
+  theme_minimal() + 
+  guides(color = FALSE, 
+         fill = FALSE) + 
+  geom_hline(yintercept=41.42,
+             color = "#01A08A") +
+  annotate(geom="text", 
+           x = as.Date("2021-07-01", "%Y-%m-%d"),
+           y = 55, 
+           label = "One SD Above Mean (41.42)",
+           color= "#01A08A") +
+  theme(text = element_text(size = 20),
+        axis.title.x = element_text(margin = margin(t = 10, r = 0, b = 0, l = 0)),
+        legend.position = "none") 
+
+fig5
+```
